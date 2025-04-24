@@ -48,33 +48,26 @@ itsdangerous
 ## Installation
 
 1. **Clone the repository**
-   ```bash
-git clone https://github.com/your-username/your-repo.git
-cd your-repo
+```
+git clone https://github.com/daredevilx616/RSA-ChatApp.git
+cd RSA-ChatApp
 ```
 
-2. **Create and activate a virtual environment**
-   ```bash
-python3 -m venv venv
-source venv/bin/activate   # on macOS/Linux
-venv\Scripts\activate    # on Windows
+2. **Install dependencies**
 ```
-
-3. **Install dependencies**
-   ```bash
 pip install -r requirements.txt
 ```
 
-4. **Initialize the database**
-   ```bash
+3. **Initialize the database**
+```
 python
 >>> from app import db
 >>> db.create_all()
 >>> exit()
 ```
 
-5. **Run the application**
-   ```bash
+4. **Run the application**
+```
 export FLASK_APP=app.py        # macOS/Linux
 set FLASK_APP=app.py           # Windows
 flask run
