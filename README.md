@@ -58,19 +58,9 @@ cd RSA-ChatApp
 pip install -r requirements.txt
 ```
 
-3. **Initialize the database**
+3. **Run the application**
 ```
-python
->>> from app import db
->>> db.create_all()
->>> exit()
-```
-
-4. **Run the application**
-```
-export FLASK_APP=app.py        # macOS/Linux
-set FLASK_APP=app.py           # Windows
-flask run
+python app.py
 ```
 
 Open your browser at `http://127.0.0.1:5000`.
