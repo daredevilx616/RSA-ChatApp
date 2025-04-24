@@ -92,7 +92,6 @@ Open your browser at `http://127.0.0.1:5000`.
 ```text
 ├── app.py                # Main Flask application
 ├── requirements.txt      # Python dependencies
-├── messaging.db          # SQLite database (auto-created)
 ├── templates/            # Jinja2 HTML templates
 │   ├── base.html
 │   ├── landing.html
@@ -102,6 +101,8 @@ Open your browser at `http://127.0.0.1:5000`.
 │   ├── forgot_password.html
 │   ├── reset_password.html
 │   └── index.html
+├── instance/
+│   └── messaging.db      # SQLite database (auto-created)
 └── static/
     └── background.jpg    # Background image for UI
 ```
