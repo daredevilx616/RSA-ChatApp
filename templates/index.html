@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% block title %}Secure Messaging{% endblock %}
+{% block content %}
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+  <a class="navbar-brand" href="#">Secure Messaging</a>
+  <div class="collapse navbar-collapse">
+    <ul class="navbar-nav ml-auto">
+      <li class="nav-item">
+        <span class="navbar-text mr-3">Welcome, {{ current_user.username }}!</span>
+      </li>
+      <li class="nav-item">
+        <a class="btn btn-outline-light" href="/logout">Logout</a>
+      </li>
+    </ul>
+  </div>
+</nav>
+<div class="container mt-4">
+  <div class="row">
+    <!-- Left Column: Message Sending -->
+    <div class="col-md-6">
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-primary text-white">
+          <h4 class="mb-0">Send a Message</h4>
+        </div>
+        <div class="card-body">
+          <form id="messageForm">
+            <div class="form-group">
+              <label for="recipient">Recipient</label>
+              <select id="recipient" name="recipient" class="form-control">
+                {% for user in users %}
+                  <option value="{{ user.username }}">{{ user.username }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="message">Message</label>
+              <textarea id="message" class="form-control" rows="4"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Send Message</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Right Column: Received Messages -->
+    <div class="col-md-6">
+      <div class="card shadow-sm">
+        <div class="card-header bg-info text-white">
+          <h4 class="mb-0">Received Messages</h4>
+        </div>
+        <div class="card-body">
+          <!-- Global Private Key section with Verify Credentials -->
+          <div class="mb-3">
+            <h5>Your Private Key</h5>
+            <div class="form-group">
+              <label for="globalPrivateKey">Private Key (from registration)</label>
+              <!-- Start hidden by default with the "masked" class -->
+              <textarea
+                id="globalPrivateKey"
+                class="form-control masked"
+                rows="4"
+                placeholder="Paste your private key here"
+              ></textarea>
+            </div>
+            <!-- Toggle button goes above or beside your Verify button -->
+            <button
+              id="toggleKeyBtn"
+              class="btn btn-secondary btn-block mb-2"
+              onclick="togglePrivateKey()"
+            >Show Key</button>
+            <button
+              id="verifyPrivateKeyBtn"
+              class="btn btn-warning btn-block"
+              onclick="verifyPrivateKey()"
+            >Verify Credentials</button>
+            <div id="globalKeyStatus" class="mt-2"></div>
+          </div>
+          
+          
+          <button onclick="loadMessages()" class="btn btn-info btn-block mb-3">Refresh Messages</button>
+          <div id="messages"></div>
+        </div>
+      </div>
+    </div>
+    
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// (Your JavaScript functions for handling messages, decrypting, deleting, etc.)
+function verifyPrivateKey() {
+  var pk = document.getElementById('globalPrivateKey').value.trim();
+  var statusDiv = document.getElementById('globalKeyStatus');
+  if ((pk.includes("-----BEGIN RSA PRIVATE KEY-----") || pk.includes("-----BEGIN PRIVATE KEY-----")) &&
+      (pk.includes("-----END RSA PRIVATE KEY-----") || pk.includes("-----END PRIVATE KEY-----"))) {
+    statusDiv.innerHTML = '<span class="text-success">Private key appears valid!</span>';
+  } else {
+    statusDiv.innerHTML = '<span class="text-danger">Invalid private key format.</span>';
+  }
+}
+
+function loadMessages() {
+  fetch('/messages?cacheBust=' + new Date().getTime(), { cache: 'no-cache' })
+    .then(response => response.json())
+    .then(data => {
+      var messagesDiv = document.getElementById('messages');
+      messagesDiv.innerHTML = "";
+      if (data.error) {
+        messagesDiv.innerHTML = data.error;
+        return;
+      }
+      data.forEach(function(msg) {
+        var messageContainer = document.createElement('div');
+        messageContainer.className = "mb-3 p-3 border rounded";
+        messageContainer.innerHTML = `<strong>From:</strong> ${msg.sender} <br>
+          <strong>Time:</strong> ${msg.timestamp} <br>
+          <strong>Ciphertext:</strong> <span class="ciphertextText">${msg.ciphertext}</span><br>`;
+        
+        var otpLabel = document.createElement('label');
+        otpLabel.innerText = "Authenticator Code:";
+        otpLabel.className = "mt-2";
+        messageContainer.appendChild(otpLabel);
+        
+        var otpInput = document.createElement('input');
+        otpInput.type = "text";
+        otpInput.placeholder = "Enter OTP code";
+        otpInput.className = "form-control form-control-sm otpInput mt-1 mb-2";
+        messageContainer.appendChild(otpInput);
+        
+        var decryptBtn = document.createElement('button');
+        decryptBtn.className = "btn btn-secondary btn-sm";
+        decryptBtn.innerText = "Decrypt";
+        decryptBtn.onclick = function() {
+          decryptMessageFor(messageContainer, msg.ciphertext);
+        };
+        messageContainer.appendChild(decryptBtn);
+        
+        var deleteBtn = document.createElement('button');
+        deleteBtn.className = "btn btn-danger btn-sm ml-2";
+        deleteBtn.innerText = "Delete";
+        deleteBtn.onclick = function() {
+          deleteMessage(messageContainer, msg.id);
+        };
+        messageContainer.appendChild(deleteBtn);
+        
+        var decryptedDiv = document.createElement('div');
+        decryptedDiv.className = "decryptedMessage mt-2";
+        messageContainer.appendChild(decryptedDiv);
+        
+        messagesDiv.appendChild(messageContainer);
+      });
+    })
+    .catch(error => console.error('Error loading messages:', error));
+}
+
+function decryptMessageFor(messageContainer, ciphertext) {
+  var otpInput = messageContainer.querySelector('.otpInput');
+  var totpCode = otpInput.value;
+  var privateKey = document.getElementById('globalPrivateKey').value;
+  
+  fetch('/verify_totp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'totp_code=' + encodeURIComponent(totpCode)
+  })
+  .then(response => response.json())
+  .then(data => {
+    var decryptedDiv = messageContainer.querySelector('.decryptedMessage');
+    if (data.success) {
+      var decrypt = new JSEncrypt();
+      decrypt.setPrivateKey(privateKey);
+      var plaintext = decrypt.decrypt(ciphertext);
+      if (plaintext === false || plaintext === null) {
+        decryptedDiv.innerHTML = '<span class="text-danger">Decryption failed! Check your private key.</span>';
+      } else {
+        decryptedDiv.innerHTML = '<span class="text-success">' + plaintext + '</span>';
+      }
+    } else {
+      decryptedDiv.innerHTML = '<span class="text-danger">TOTP verification failed: ' + data.error + '</span>';
+    }
+  });
+}
+function togglePrivateKey() {
+    const ta = document.getElementById('globalPrivateKey');
+    const btn = document.getElementById('toggleKeyBtn');
+    if (ta.classList.contains('masked')) {
+      // reveal
+      ta.classList.remove('masked');
+      btn.innerText = 'Hide Key';
+    } else {
+      // hide
+      ta.classList.add('masked');
+      btn.innerText = 'Show Key';
+    }
+  }
+function deleteMessage(messageContainer, messageId) {
+  if (confirm("Are you sure you want to delete this message?")) {
+    fetch('/delete_message/' + messageId, { method: 'DELETE' })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          messageContainer.remove();
+        } else {
+          alert("Error deleting message: " + data.error);
+        }
+      });
+  }
+}
+
+// Message form submission
+document.getElementById('messageForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  console.log("Message form submitted"); // Debug
+  var recipient = document.getElementById('recipient').value;
+  var message = document.getElementById('message').value;
+  fetch('/get_public_key/' + recipient)
+    .then(response => response.json())
+    .then(data => {
+      if (data.public_key) {
+        var encrypt = new JSEncrypt();
+        encrypt.setPublicKey(data.public_key);
+        var ciphertext = encrypt.encrypt(message);
+        if (!ciphertext) {
+          alert("Encryption failed!");
+          return;
+        }
+        var formData = new FormData();
+        formData.append("recipient", recipient);
+        formData.append("ciphertext", ciphertext);
+        fetch('/send_message', {
+          method: 'POST',
+          body: formData
+        })
+        .then(response => response.json())
+        .then(result => {
+          if (result.success) {
+            alert("Message sent successfully!");
+            document.getElementById('message').value = "";
+            loadMessages();
+          } else {
+            alert("Error sending message.");
+          }
+        });
+      } else {
+        alert("Failed to get recipient public key.");
+      }
+    });
+});
+</script>
+{% endblock %}
